@@ -2,4 +2,7 @@
 
 {% block content %}
     <h1>{% block title %} Files {% endblock %}</h1>
+    {% for list in lists %}
+    <p><a href={{list.url}}> {{list.Key}} </a></p>
+    {% endfor %}
 {% endblock %}
