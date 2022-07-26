@@ -1,3 +1,4 @@
+import os
 import logging
 import boto3
 from botocore.exceptions import ClientError
@@ -6,6 +7,9 @@ import requests    # To install: pip install requests
 import json
 
 app = Flask(__name__)
+
+BUCKET_NAME=os.environ['BUCKET_NAME']
+DB_API_URL=os.environ['DB_API_URL']
 
 def create_presigned_post(bucket_name, object_name,
                           fields=None, conditions=None, expiration=3600):
@@ -67,11 +71,11 @@ def list(bucket):
     return objects
 
 def list_with_url(objects):
-
+    s3_client = boto3.client('s3')
     lists = []
     for item in objects['Contents']:
-        url = create_presigned_url("rwozniak-s3",item['Key'])
         file_name = item['Key']
+        url = create_presigned_url(BUCKET_NAME,file_name)
         new_item = {'Key':file_name,'url':url}
         lists.append(new_item)
 
@@ -79,22 +83,23 @@ def list_with_url(objects):
 
 
 
+
 @app.route('/s3')
 def index():
-    objects = list("rwozniak-s3")
+    objects = list(BUCKET_NAME)
     lists = list_with_url(objects)
     return render_template('index_s3.html',lists=lists)
 
 @app.route('/s3/presigned_form', methods=['GET'])
 def presigned_form_s3():
 
-        response = create_presigned_post('rwozniak-s3', '${filename}')
+        response = create_presigned_post(BUCKET_NAME, '${filename}')
         if response is None:
             exit(1)
         return render_template('s3_form.html',presigned_s3_data=response)
 
 @app.route('/s3/db_info', methods = ['GET'])
 def db_info():
-    req = requests.get("http://rwozniak-alb-892475136.eu-west-1.elb.amazonaws.com/db/API_number_of_books/")
+    req = requests.get(DB_API_URL)
     data = json.loads(req.content)
     return render_template('db_info.html', data=data)
