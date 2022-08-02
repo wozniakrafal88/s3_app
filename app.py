@@ -102,4 +102,4 @@ def presigned_form_s3():
 def db_info():
     req = requests.get(DB_API_URL)
     data = json.loads(req.content)
-    return render_template('db_info.html', data=data)
+    return render_template('db_file.html', data=data)
