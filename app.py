@@ -1,105 +1,84 @@
 import os
-import logging
+from sqlalchemy import create_engine
+from sqlalchemy.orm import scoped_session, sessionmaker
+from flask import Flask, render_template, request, url_for, redirect, jsonify
+from botocore.config import Config
+import psycopg2
+import sys
 import boto3
-from botocore.exceptions import ClientError
-from flask import Flask, render_template, request, url_for, redirect
-import requests    # To install: pip install requests
-import json
+import urllib
 
 app = Flask(__name__)
 
-BUCKET_NAME=os.environ['BUCKET_NAME']
-DB_API_URL=os.environ['DB_API_URL']
+ENDPOINT=os.environ['RDSHOST']
+DBNAME=os.environ['DB_DBNAME']
+PORT=os.environ['DB_PORT']
+USER=os.environ['DB_USERNAME']
+#password=os.environ['DB_PASSWORD']
+PGPASSWORD=os.environ['PGPASSWORD']
+REGION=os.environ['AWS_REGION']
 
-def create_presigned_post(bucket_name, object_name,
-                          fields=None, conditions=None, expiration=3600):
-    """Generate a presigned URL S3 POST request to upload a file
+my_config = Config(
+    region_name = 'eu-west-1'
+)
 
-    :param bucket_name: string
-    :param object_name: string
-    :param fields: Dictionary of prefilled form fields
-    :param conditions: List of conditions to include in the policy
-    :param expiration: Time in seconds for the presigned URL to remain valid
-    :return: Dictionary with the following keys:
-        url: URL to post to
-        fields: Dictionary of form fields and values to submit with the POST
-    :return: None if error.
-    """
+#session = boto3.Session()
+client = boto3.client('rds', config=my_config)
 
-    # Generate a presigned S3 POST URL
-    s3_client = boto3.client('s3')
-    try:
-        response = s3_client.generate_presigned_post(bucket_name,
-                                                     object_name,
-                                                     Fields=fields,
-                                                     Conditions=conditions,
-                                                     ExpiresIn=expiration)
-    except ClientError as e:
-        logging.error(e)
-        return None
+token = client.generate_db_auth_token(DBHostname=ENDPOINT, Port=PORT, DBUsername=USER, Region=REGION)
 
-    # The response contains the presigned URL and required fields
-    return response
+PASSWD= urllib.parse.quote_plus(token)
 
-def create_presigned_url(bucket_name, object_name, expiration=3600):
-    """Generate a presigned URL to share an S3 object
+url = "postgresql://"+USER+":"+PASSWD+"@"+ENDPOINT+"/"+DBNAME+"?sslmode=require"
 
-    :param bucket_name: string
-    :param object_name: string
-    :param expiration: Time in seconds for the presigned URL to remain valid
-    :return: Presigned URL as string. If error, returns None.
-    """
+#url = "postgresql://"+USER+":password@"+ENDPOINT+":"+PORT+"/"+DBNAME
+#url = "postgresql://"+user+"@"+host+"/"+dbname
 
-    # Generate a presigned URL for the S3 object
-    s3_client = boto3.client('s3')
-    try:
-        response = s3_client.generate_presigned_url('get_object',
-                                                    Params={'Bucket': bucket_name,
-                                                            'Key': object_name},
-                                                    ExpiresIn=expiration)
-    except ClientError as e:
-        logging.error(e)
-        return None
+engine = create_engine(url)
 
-    # The response contains the presigned URL
-    return response
-
-
-def list(bucket):
-    s3 = boto3.client('s3')
-    objects = s3.list_objects(Bucket=bucket)
-    return objects
-
-def list_with_url(objects):
-    s3_client = boto3.client('s3')
-    lists = []
-    for item in objects['Contents']:
-        file_name = item['Key']
-        url = create_presigned_url(BUCKET_NAME,file_name)
-        new_item = {'Key':file_name,'url':url}
-        lists.append(new_item)
-
-    return lists
+db = scoped_session(sessionmaker(bind=engine))
 
 
 
-
-@app.route('/s3')
+@app.route('/db')
 def index():
-    objects = list(BUCKET_NAME)
-    lists = list_with_url(objects)
-    return render_template('index_s3.html',lists=lists)
 
-@app.route('/s3/presigned_form', methods=['GET'])
-def presigned_form_s3():
+        books = db.execute('SELECT * FROM books;')
 
-        response = create_presigned_post(BUCKET_NAME, '${filename}')
-        if response is None:
-            exit(1)
-        return render_template('s3_form.html',presigned_s3_data=response)
+        return render_template('index.html', books=books)
 
-@app.route('/s3/db_info', methods = ['GET'])
-def db_info():
-    req = requests.get(DB_API_URL)
-    data = json.loads(req.content)
-    return render_template('db_file.html', data=data)
+
+
+@app.route('/db/create/', methods=('GET', 'POST'))
+def create():
+    if request.method == 'POST':
+        title = request.form['title']
+        author = request.form['author']
+        pages_num = int(request.form['pages_num'])
+        review = request.form['review']
+
+        db.execute("INSERT INTO books (title, author, pages_num, review) VALUES (:title, :author, :pages_num, :review)",
+                    {"title": title, "author": author, "pages_num": pages_num, "review": review})
+        db.commit()
+
+        return redirect(url_for('index'))
+
+    return render_template('create.html')
+
+@app.route("/db/bookDelete/<int:bookid>")
+def bookDelete(bookid):
+
+    #create delete query as string
+
+    strSQL="delete from books where id="+str(bookid)
+    db.execute(strSQL)
+    #commit to database
+    db.commit()
+    return  render_template('delete.html')
+
+
+@app.route('/db/API_number_of_books/')
+def API_number_of_books():
+    result=db.execute('SELECT count(*) FROM books;').scalar()
+    number_of_books=str(result)
+    return jsonify(number_of_books=number_of_books)

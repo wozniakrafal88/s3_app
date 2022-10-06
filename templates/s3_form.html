@@ -3,9 +3,11 @@
 {% block content %}
     <h1>{% block title %} Add a New File {% endblock %}</h1>
     <form action={{ presigned_s3_data.url }}  method="post" enctype="multipart/form-data">
-    {% for item in  presigned_s3_data.fields %}
-           <input type="hidden" name="{{ item }}" value="{{ presigned_s3_data.fields[item]  }}" />
-    {% endfor %}
+        <!-- Copy the 'fields' key:values returned by S3Client.generate_presigned_post() -->
+        <input type="hidden" name="key" value={{ presigned_s3_data.fields.key }} />
+        <!--input type="hidden" name="AWSAccessKeyId" value="VALUE" /-->
+        <input type="hidden" name="policy" value={{ presigned_s3_data.fields.policy }} />
+        <input type="hidden" name="signature" value={{ presigned_s3_data.fields.signature }} />
       File:
         <input type="file"   name="file" /> <br />
         <input type="submit" name="submit" value="Upload to Amazon S3" />
