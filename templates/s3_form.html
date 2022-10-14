@@ -1,10 +1,9 @@
 {% extends 'baseS3.html' %}
-
 {% block content %}
     <h1>{% block title %} Add a New File {% endblock %}</h1>
     <form action={{ presigned_s3_data.url }}  method="post" enctype="multipart/form-data">
-    {% for item in  data.fields %}
-           <input type="hidden" name="{{ item }}" value="{{ data.fields[item]  }}" />
+    {% for item in  presigned_s3_data.fields %}
+           <input type="hidden" name="{{ item }}" value="{{ presigned_s3_data.fields[item]  }}" />
     {% endfor %}
       File:
         <input type="file"   name="file" /> <br />
